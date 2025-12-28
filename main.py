@@ -1,3 +1,5 @@
+import os
+import sys
 import cv2
 import numpy as np
 from OpenGL.raw.GLUT import glutPostRedisplay
@@ -7,7 +9,6 @@ from monitor import SystemMonitor  # system-level CPU/RAM logger
 import threading
 import queue
 import time
-import sys
 
 from src.controllers.hand_controller import HandTrackingController
 from src.rendering.cube_renderer import CubeRenderer
@@ -16,13 +17,22 @@ from src.rendering.cube_renderer import CubeRenderer
 global_mode = {"mode": 3}   # 1=RAW, 2=SMOOTH, 3=KALMAN
 
 
+def resource_path(rel_path: str) -> str:
+    if hasattr(sys, "_MEIPASS"):
+        base = sys._MEIPASS
+    else:
+        base = os.path.abspath(".")
+    return os.path.join(base, rel_path)
+
+
 def main():
+    # ================== START SYSTEM MONITOR ==================
     monitor = SystemMonitor(
         interval_sec=1.0,
         csv_path="system_benchmark.csv"
     )
     monitor.start()
-
+    # ==========================================================
 
     try:
         cap = cv2.VideoCapture(0)
@@ -52,7 +62,9 @@ def main():
         rot_dy_s = 0.0
 
         render_queue = queue.Queue()
-        cube = CubeRenderer(obj_path="models/gathered-anatomy/right_hand.obj")
+
+        obj_path = resource_path("models/gathered-anatomy/right_hand.obj")
+        cube = CubeRenderer(obj_path=obj_path)
 
         def gl_thread():
             from OpenGL.GLUT import (
@@ -172,17 +184,15 @@ def main():
 
                     # batas bawah skala
                     s_min = 0.5
-                    # sensitivitas pembesaran (semakin besar, semakin cepat membesar)
+                    # sensitivitas pembesaran
                     k = 1.0 / (200.0 - d_min)
 
-                    t = (d_clamped - d_min)
-                    target_scale = s_min + k * t  # bisa > 2.0, tidak ada limit atas
+                    t_delta = (d_clamped - d_min)
+                    target_scale = s_min + k * t_delta  # tidak ada limit atas
 
                     if mode_rot == 1:
-                        # RAW: langsung
                         scale = target_scale
                     else:
-                        # mode lain: smoothing
                         scale = (1 - scale_alpha) * scale + scale_alpha * target_scale
 
                     cv2.line(
@@ -205,7 +215,7 @@ def main():
                 x_norm = (dx - cx) / cx       # -1..1
                 y_norm = (dy - cy) / cy       # -1..1
 
-                jitter_gain = 180.0            # naikkan jika perlu
+                jitter_gain = 180.0
                 x_nonlin = np.sign(x_norm) * (abs(x_norm) ** 0.5)
                 y_nonlin = np.sign(y_norm) * (abs(y_norm) ** 0.5)
 
